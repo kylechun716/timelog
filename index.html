@@ -1,0 +1,1011 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TimeLog</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0a0b0f;
+      --panel:     #111318;
+      --card:      #16181f;
+      --card-hover:#1c1e28;
+      --border:    rgba(255,255,255,0.07);
+      --border-s:  rgba(255,255,255,0.12);
+
+      --text:      #f0f1f5;
+      --text-2:    #9095a3;
+      --text-3:    #565b6a;
+
+      --indigo:    #6366f1;
+      --indigo-bg: rgba(99,102,241,0.10);
+
+      --emerald:   #10b981;
+      --emerald-bg:rgba(16,185,129,0.10);
+
+      --rose:      #f43f5e;
+
+      --u1: #818cf8; --u1-bg: rgba(129,140,248,0.12);
+      --u2: #fb7185; --u2-bg: rgba(251,113,133,0.12);
+      --u3: #34d399; --u3-bg: rgba(52,211,153,0.12);
+
+      --r: 10px;
+      --sidebar: 220px;
+
+      font-family: 'Inter', -apple-system, sans-serif;
+      font-size: 14px;
+    }
+
+    html, body { height: 100%; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      min-height: 100vh;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── SIDEBAR ── */
+    .sidebar {
+      width: var(--sidebar);
+      flex-shrink: 0;
+      background: var(--panel);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      padding: 24px 16px;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 8px;
+      margin-bottom: 32px;
+    }
+
+    .logo-mark {
+      width: 32px; height: 32px;
+      background: var(--indigo);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 15px;
+      flex-shrink: 0;
+    }
+
+    .logo-text { font-size: 0.95rem; font-weight: 700; letter-spacing: -0.02em; }
+
+    .sidebar-section {
+      font-size: 0.65rem;
+      font-weight: 600;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      padding: 0 8px;
+      margin-bottom: 8px;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 10px;
+      border-radius: 7px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--text-2);
+      cursor: pointer;
+      border: none;
+      background: none;
+      width: 100%;
+      text-align: left;
+      transition: background 0.12s, color 0.12s;
+      margin-bottom: 2px;
+    }
+
+    .nav-item:hover { background: var(--card); color: var(--text); }
+    .nav-item.active { background: var(--indigo-bg); color: var(--indigo); }
+    .nav-item svg { opacity: 0.7; flex-shrink: 0; }
+    .nav-item.active svg { opacity: 1; }
+
+    .sidebar-footer {
+      margin-top: auto;
+      padding: 12px 8px 0;
+      border-top: 1px solid var(--border);
+    }
+
+    .cycle-info { font-size: 0.72rem; color: var(--text-3); line-height: 1.6; }
+    .cycle-info strong { color: var(--text-2); display: block; margin-bottom: 2px; }
+
+    /* ── DOGGO ── */
+    .doggo-area {
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid var(--border);
+    }
+
+    .doggo-track {
+      position: relative;
+      height: 66px;
+      overflow: hidden;
+    }
+
+    .doggo-wrap {
+      position: absolute;
+      bottom: 0;
+      user-select: none;
+      line-height: 0;
+    }
+
+    /* resting — centered, gentle breath */
+    .doggo-wrap.rest {
+      left: 50%;
+      transform: translateX(-50%);
+      animation: dogBreath 3.5s ease-in-out infinite;
+    }
+
+    /* running — slides left↔right + bounce */
+    .doggo-wrap.run {
+      animation: dogSlide 2.4s ease-in-out infinite alternate,
+                 dogJump  0.38s ease-in-out infinite;
+    }
+
+    @keyframes dogSlide {
+      0%   { left: 0px; }
+      100% { left: calc(100% - 62px); }
+    }
+    @keyframes dogJump {
+      0%, 100% { bottom: 0px; }
+      50%       { bottom: 6px; }
+    }
+    @keyframes dogBreath {
+      0%, 100% { transform: translateX(-50%) scaleY(1); }
+      50%       { transform: translateX(-50%) scaleY(0.95); }
+    }
+
+    .doggo-status {
+      font-size: 0.68rem;
+      color: var(--text-3);
+      text-align: center;
+      margin-top: 5px;
+      font-weight: 500;
+      letter-spacing: 0.02em;
+      min-height: 16px;
+    }
+
+    /* ── MAIN ── */
+    .main { flex: 1; display: flex; flex-direction: column; min-height: 100vh; }
+
+    .topbar {
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      padding: 0 32px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .topbar-title { font-size: 0.9rem; font-weight: 600; }
+
+    .topbar-right { display: flex; align-items: center; gap: 12px; }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 5px 12px;
+      font-size: 0.75rem;
+      color: var(--text-2);
+      font-weight: 500;
+    }
+
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--emerald); display: inline-block; }
+    .dot.off { background: var(--text-3); }
+
+    /* loading */
+    .loading-overlay {
+      position: fixed; inset: 0;
+      background: var(--bg);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 999;
+      gap: 14px;
+      transition: opacity 0.3s;
+    }
+    .loading-overlay.hidden { opacity: 0; pointer-events: none; }
+    .spinner {
+      width: 32px; height: 32px;
+      border: 2px solid var(--border-s);
+      border-top-color: var(--indigo);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-text { font-size: 0.82rem; color: var(--text-3); }
+
+    /* ── PAGE ── */
+    .page { display: none; padding: 28px 32px; }
+    .page.active { display: block; }
+
+    /* ── SECTION HEADER ── */
+    .section-hd { display: flex; align-items: baseline; gap: 10px; margin-bottom: 16px; }
+    .section-hd h2 { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-3); }
+    .section-hd .line { flex: 1; height: 1px; background: var(--border); }
+
+    /* ── GRIDS ── */
+    .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 14px; margin-bottom: 28px; }
+    .grid-4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 28px; }
+
+    /* ── TIMER CARD ── */
+    .timer-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      padding: 22px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .timer-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: transparent;
+      transition: background 0.2s;
+    }
+
+    .timer-card.live::before { background: var(--emerald); }
+    .timer-card.live {
+      border-color: rgba(16,185,129,0.25);
+      box-shadow: 0 0 0 1px rgba(16,185,129,0.08), 0 4px 24px rgba(16,185,129,0.06);
+    }
+
+    .tc-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+    .tc-user { display: flex; align-items: center; gap: 10px; }
+
+    .avatar {
+      width: 36px; height: 36px;
+      border-radius: 9px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.85rem;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .tc-name { font-weight: 600; font-size: 0.9rem; }
+    .tc-status { font-size: 0.72rem; color: var(--text-3); margin-top: 2px; display: flex; align-items: center; gap: 5px; }
+    .tc-status.live { color: var(--emerald); }
+
+    .status-pulse {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--emerald);
+      animation: pulse 1.6s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.8); }
+    }
+
+    .tc-clock {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 2rem;
+      font-weight: 500;
+      letter-spacing: -0.02em;
+      color: var(--text);
+      margin-bottom: 4px;
+      line-height: 1;
+    }
+
+    .tc-clock-label { font-size: 0.72rem; color: var(--text-3); margin-bottom: 18px; font-weight: 500; }
+
+    .tc-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+
+    .tc-stat {
+      background: var(--panel);
+      border-radius: 7px;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+    }
+
+    .tc-stat-label { font-size: 0.68rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); margin-bottom: 5px; }
+    .tc-stat-value { font-size: 0.95rem; font-weight: 600; color: var(--text); }
+    .tc-stat-value.money { color: var(--emerald); }
+
+    .btn {
+      width: 100%;
+      padding: 10px 16px;
+      border: none;
+      border-radius: 7px;
+      font-family: 'Inter', sans-serif;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      letter-spacing: 0.01em;
+      transition: all 0.12s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+    }
+
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; }
+
+    .btn-start { background: var(--emerald); color: #fff; }
+    .btn-start:hover:not(:disabled) { background: #0da874; transform: translateY(-1px); }
+    .btn-start:active:not(:disabled) { transform: translateY(0); }
+
+    .btn-stop { background: var(--rose); color: #fff; border: none; }
+    .btn-stop:hover:not(:disabled) { background: #e11d48; transform: translateY(-1px); }
+    .btn-stop:active:not(:disabled) { transform: translateY(0); }
+
+    /* ── STAT CARD ── */
+    .stat-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--r); padding: 18px 20px; }
+    .sc-label { font-size: 0.7rem; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--text-3); margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+    .sc-label .dot-u { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+    .sc-value { font-size: 1.55rem; font-weight: 700; letter-spacing: -0.03em; color: var(--text); line-height: 1; margin-bottom: 5px; }
+    .sc-value.hi { color: var(--emerald); }
+    .sc-sub { font-size: 0.75rem; color: var(--text-3); }
+
+    /* ── CHART CARD ── */
+    .chart-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--r); padding: 22px 24px; margin-bottom: 28px; }
+    .chart-hd { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+    .chart-title { font-size: 0.85rem; font-weight: 600; color: var(--text); }
+    .chart-sub { font-size: 0.72rem; color: var(--text-3); margin-top: 2px; }
+    .chart-wrap { position: relative; height: 240px; }
+
+    /* ── LOGS ── */
+    .logs-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+
+    .ctrl {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      color: var(--text);
+      padding: 8px 12px;
+      font-family: 'Inter', sans-serif;
+      font-size: 0.8rem;
+      outline: none;
+      appearance: none;
+      -webkit-appearance: none;
+      transition: border-color 0.12s;
+    }
+
+    .ctrl:focus { border-color: var(--indigo); }
+
+    select.ctrl {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239095a3' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 10px center;
+      padding-right: 30px;
+    }
+
+    .search-wrap { flex: 1; min-width: 160px; position: relative; }
+    .search-wrap svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); pointer-events: none; }
+    .search-wrap .ctrl { width: 100%; padding-left: 32px; }
+
+    .table-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; }
+
+    table { width: 100%; border-collapse: collapse; }
+    thead tr { background: var(--panel); border-bottom: 1px solid var(--border); }
+    th { padding: 11px 16px; text-align: left; font-size: 0.68rem; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--text-3); white-space: nowrap; }
+    td { padding: 12px 16px; font-size: 0.82rem; border-top: 1px solid var(--border); color: var(--text-2); white-space: nowrap; }
+    tr:hover td { background: var(--card-hover); }
+
+    .mono { font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; }
+
+    .user-chip { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 0.82rem; }
+    .user-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+    .cycle-tag { display: inline-block; background: var(--panel); border: 1px solid var(--border); border-radius: 5px; padding: 2px 8px; font-size: 0.72rem; color: var(--text-3); font-weight: 500; }
+
+    .empty-state { text-align: center; padding: 56px 20px; color: var(--text-3); font-size: 0.82rem; }
+    .empty-icon { font-size: 2rem; margin-bottom: 10px; opacity: 0.4; }
+
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border-s); border-radius: 10px; }
+  </style>
+</head>
+<body>
+
+<!-- Loading overlay -->
+<div class="loading-overlay" id="loading">
+  <div class="spinner"></div>
+  <div class="loading-text">Connecting to database…</div>
+</div>
+
+<!-- SIDEBAR -->
+<nav class="sidebar">
+  <div class="logo">
+    <div class="logo-mark">⏱</div>
+    <span class="logo-text">TimeLog</span>
+  </div>
+
+  <div class="sidebar-section" style="margin-bottom:8px">Navigation</div>
+
+  <button class="nav-item active" onclick="switchPage('dashboard', this)">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+    Dashboard
+  </button>
+
+  <button class="nav-item" onclick="switchPage('logs', this)">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>
+    Time Logs
+  </button>
+
+  <div class="sidebar-footer">
+    <div class="cycle-info">
+      <strong>Current Cycle</strong>
+      <span id="sidebar-cycle"></span>
+    </div>
+    <div class="doggo-area">
+      <div class="doggo-track">
+        <div class="doggo-wrap rest" id="doggo-wrap">
+          <span id="dog-emoji"></span>
+        </div>
+      </div>
+      <div class="doggo-status" id="doggo-status">resting 💤</div>
+    </div>
+  </div>
+</nav>
+
+<!-- MAIN -->
+<div class="main">
+
+  <div class="topbar">
+    <span class="topbar-title" id="topbar-title">Dashboard</span>
+    <div class="topbar-right">
+      <div class="pill"><span class="dot off" id="active-dot"></span><span id="active-label">No active timers</span></div>
+    </div>
+  </div>
+
+  <!-- DASHBOARD PAGE -->
+  <div class="page active" id="page-dashboard">
+    <div class="section-hd"><h2>Timers</h2><div class="line"></div></div>
+    <div class="grid-3" id="users-grid"></div>
+
+    <div class="section-hd"><h2>Cycle Summary</h2><div class="line"></div></div>
+    <div class="grid-4" id="summary-grid"></div>
+
+    <div class="chart-card">
+      <div class="chart-hd">
+        <div>
+          <div class="chart-title">Earnings per Cycle</div>
+          <div class="chart-sub">Grouped by user — $70 / hr</div>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="earningsChart"></canvas></div>
+    </div>
+
+    <div class="chart-card">
+      <div class="chart-hd">
+        <div>
+          <div class="chart-title">Hours per Cycle</div>
+          <div class="chart-sub">Grouped by user</div>
+        </div>
+      </div>
+      <div class="chart-wrap"><canvas id="hoursChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- LOGS PAGE -->
+  <div class="page" id="page-logs">
+    <div class="logs-toolbar">
+      <select class="ctrl" id="logs-user-filter">
+        <option value="all">All Users</option>
+      </select>
+      <select class="ctrl" id="logs-cycle-filter">
+        <option value="all">All Cycles</option>
+      </select>
+      <div class="search-wrap">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#565b6a" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+        <input class="ctrl" type="text" id="logs-search" placeholder="Search users…" />
+      </div>
+    </div>
+    <div class="table-card">
+      <table>
+        <thead>
+          <tr>
+            <th>User</th><th>Date</th><th>Start</th><th>End</th>
+            <th>Duration</th><th>Earnings</th><th>Cycle</th>
+          </tr>
+        </thead>
+        <tbody id="logs-body"></tbody>
+      </table>
+      <div class="empty-state" id="logs-empty" style="display:none">
+        <div class="empty-icon">📋</div>No time logs yet.
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── FIREBASE ───────────────────────────────────────────────────────────────────
+const firebaseConfig = {
+  apiKey: "AIzaSyANEuxpzG6pUiVLmYvkOwylxTGuqVTS98w",
+  authDomain: "timelog-1b859.firebaseapp.com",
+  projectId: "timelog-1b859",
+  storageBucket: "timelog-1b859.firebasestorage.app",
+  messagingSenderId: "44894651339",
+  appId: "1:44894651339:web:34e4a56c1a5c0e54ab2c4e",
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+// ── CONFIG ─────────────────────────────────────────────────────────────────────
+const HOURLY_RATE = 70;
+const WEEK_START  = 6; // Saturday
+
+const USERS = [
+  { id:'user1', name:'Kyle',  hex:'#818cf8', bg:'rgba(129,140,248,0.12)' },
+  { id:'user2', name:'Juwon', hex:'#fb7185', bg:'rgba(251,113,133,0.12)' },
+  { id:'user3', name:'Mom',   hex:'#34d399', bg:'rgba(52,211,153,0.12)'  },
+];
+
+// ── STATE ──────────────────────────────────────────────────────────────────────
+let data = { logs: [], active: {} };
+let ready = { sessions: false, active: false };
+
+// ── CYCLE UTILS ───────────────────────────────────────────────────────────────
+function cycleStart(date) {
+  const d = new Date(date); d.setHours(0,0,0,0);
+  d.setDate(d.getDate() - (d.getDay() - WEEK_START + 7) % 7);
+  return d;
+}
+function cycleKey(date) { return cycleStart(date).toISOString().slice(0,10); }
+function cycleLabel(key) {
+  const s = new Date(key + 'T00:00:00'), e = new Date(s);
+  e.setDate(e.getDate() + 6);
+  const f = d => d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+  return `${f(s)} – ${f(e)}`;
+}
+// Always returns the current cycle key — recomputed live so rollovers are caught
+function todayCycle() { return cycleKey(new Date()); }
+let _lastCycle = todayCycle();
+
+// ── FORMAT ────────────────────────────────────────────────────────────────────
+function fmtMs(ms) {
+  if (!ms || ms < 0) ms = 0;
+  const s=Math.floor(ms/1000), h=Math.floor(s/3600), m=Math.floor((s%3600)/60), sc=s%60;
+  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sc).padStart(2,'0')}`;
+}
+function fmtMoney(ms) { return '$' + (ms / 3600000 * HOURLY_RATE).toFixed(2); }
+function fmtHrs(ms)   { return (ms / 3600000).toFixed(2) + 'h'; }
+
+// ── AGG ───────────────────────────────────────────────────────────────────────
+function userCycleMs(uid, ck) {
+  return data.logs
+    .filter(l => l.userId === uid && cycleKey(l.start) === ck)
+    .reduce((sum, l) => sum + l.duration, 0);
+}
+function allCycles() {
+  const k = new Set(data.logs.map(l => cycleKey(l.start)));
+  k.add(todayCycle()); return [...k].sort();
+}
+function liveMs(uid) {
+  return data.active[uid] ? Date.now() - data.active[uid] : 0;
+}
+
+// ── TIMER ACTIONS ──────────────────────────────────────────────────────────────
+async function startTimer(uid) {
+  if (data.active[uid]) return;
+  const btn = document.querySelector(`#card-${uid} .btn`);
+  if (btn) btn.disabled = true;
+  await db.collection('active').doc(uid).set({ startTs: Date.now() });
+}
+
+async function stopTimer(uid) {
+  const startTs = data.active[uid];
+  if (!startTs) return;
+  const btn = document.querySelector(`#card-${uid} .btn`);
+  if (btn) btn.disabled = true;
+  const end = Date.now();
+  const duration = end - startTs;
+  const batch = db.batch();
+  batch.set(db.collection('sessions').doc(), { userId: uid, start: startTs, end, duration });
+  batch.delete(db.collection('active').doc(uid));
+  await batch.commit();
+}
+
+// ── RENDER USERS ──────────────────────────────────────────────────────────────
+function renderUsers() {
+  const g = document.getElementById('users-grid'); g.innerHTML = '';
+  USERS.forEach(u => {
+    const live = !!data.active[u.id];
+    const sessMs = liveMs(u.id);
+    const totalMs = userCycleMs(u.id, todayCycle()) + sessMs;
+    const card = document.createElement('div');
+    card.className = 'timer-card' + (live ? ' live' : '');
+    card.id = 'card-' + u.id;
+    card.innerHTML = `
+      <div class="tc-head">
+        <div class="tc-user">
+          <div class="avatar" style="background:${u.bg};color:${u.hex}">${u.name[0]}</div>
+          <div>
+            <div class="tc-name">${u.name}</div>
+            <div class="tc-status ${live ? 'live' : ''}">
+              ${live ? '<div class="status-pulse"></div>Recording' : 'Idle'}
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="tc-clock" id="timer-${u.id}">${fmtMs(sessMs)}</div>
+      <div class="tc-clock-label">Current session</div>
+      <div class="tc-stats">
+        <div class="tc-stat">
+          <div class="tc-stat-label">This cycle</div>
+          <div class="tc-stat-value" id="hrs-${u.id}">${fmtHrs(totalMs)}</div>
+        </div>
+        <div class="tc-stat">
+          <div class="tc-stat-label">Earnings</div>
+          <div class="tc-stat-value money" id="earn-${u.id}">${fmtMoney(totalMs)}</div>
+        </div>
+      </div>
+      <button class="btn ${live ? 'btn-stop' : 'btn-start'}"
+              onclick="${live ? 'stopTimer' : 'startTimer'}('${u.id}')">
+        ${live
+          ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>Stop Timer`
+          : `<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>Start Timer`}
+      </button>`;
+    g.appendChild(card);
+  });
+}
+
+// ── RENDER SUMMARY ────────────────────────────────────────────────────────────
+function renderSummary() {
+  const g = document.getElementById('summary-grid'); g.innerHTML = '';
+  let tot = 0;
+  USERS.forEach(u => {
+    const ms = userCycleMs(u.id, todayCycle()) + liveMs(u.id);
+    tot += ms;
+    const c = document.createElement('div');
+    c.className = 'stat-card';
+    c.innerHTML = `
+      <div class="sc-label"><span class="dot-u" style="background:${u.hex}"></span>${u.name}</div>
+      <div class="sc-value hi">${fmtMoney(ms)}</div>
+      <div class="sc-sub">${fmtHrs(ms)}</div>`;
+    g.appendChild(c);
+  });
+  const t = document.createElement('div');
+  t.className = 'stat-card';
+  t.innerHTML = `
+    <div class="sc-label">Total — This Cycle</div>
+    <div class="sc-value hi">${fmtMoney(tot)}</div>
+    <div class="sc-sub">${fmtHrs(tot)}</div>`;
+  g.appendChild(t);
+}
+
+// ── CHARTS ────────────────────────────────────────────────────────────────────
+let chartE, chartH;
+const GRID_COLOR = 'rgba(255,255,255,0.05)';
+const TICK_COLOR = '#565b6a';
+const FONT = { family: "'Inter',sans-serif", size: 11 };
+
+function buildDatasets(field) {
+  const cycles = allCycles();
+  return USERS.map(u => ({
+    label: u.name,
+    data: cycles.map(ck => {
+      const ms = userCycleMs(u.id, ck) + (ck === todayCycle() ? liveMs(u.id) : 0);
+      return field === 'money'
+        ? parseFloat((ms / 3600000 * HOURLY_RATE).toFixed(2))
+        : parseFloat((ms / 3600000).toFixed(2));
+    }),
+    backgroundColor: u.hex + '22',
+    borderColor: u.hex,
+    borderWidth: 1.5,
+    borderRadius: 5,
+    borderSkipped: false,
+  }));
+}
+
+function chartOpts(yFmt) {
+  return {
+    responsive: true, maintainAspectRatio: false,
+    plugins: {
+      legend: { labels: { color: TICK_COLOR, font: FONT, boxWidth: 10, padding: 16 } },
+      tooltip: { callbacks: { label: ctx => `  ${ctx.dataset.label}: ${yFmt(ctx.parsed.y)}` } },
+    },
+    scales: {
+      x: { ticks: { color: TICK_COLOR, font: FONT }, grid: { color: GRID_COLOR }, border: { color: GRID_COLOR } },
+      y: { ticks: { color: TICK_COLOR, font: FONT, callback: yFmt }, grid: { color: GRID_COLOR }, border: { color: GRID_COLOR }, beginAtZero: true },
+    },
+  };
+}
+
+function renderCharts() {
+  const cycles = allCycles(), labels = cycles.map(cycleLabel);
+  if (chartE) chartE.destroy();
+  if (chartH) chartH.destroy();
+  chartE = new Chart(document.getElementById('earningsChart'), {
+    type: 'bar', data: { labels, datasets: buildDatasets('money') },
+    options: chartOpts(v => '$' + v),
+  });
+  chartH = new Chart(document.getElementById('hoursChart'), {
+    type: 'bar', data: { labels, datasets: buildDatasets('hours') },
+    options: chartOpts(v => v + 'h'),
+  });
+}
+
+// ── RENDER LOGS ───────────────────────────────────────────────────────────────
+function renderLogs() {
+  const uf  = document.getElementById('logs-user-filter').value;
+  const cycSel = document.getElementById('logs-cycle-filter');
+  const prevCf = cycSel.value;
+  const q   = document.getElementById('logs-search').value.toLowerCase();
+
+  cycSel.innerHTML = '<option value="all">All Cycles</option>';
+  allCycles().slice().reverse().forEach(ck => {
+    const o = document.createElement('option');
+    o.value = ck; o.textContent = cycleLabel(ck);
+    if (ck === prevCf) o.selected = true;
+    cycSel.appendChild(o);
+  });
+
+  const cf = cycSel.value;
+  let logs = [...data.logs].sort((a, b) => b.start - a.start);
+  if (uf !== 'all') logs = logs.filter(l => l.userId === uf);
+  if (cf !== 'all') logs = logs.filter(l => cycleKey(l.start) === cf);
+  if (q) logs = logs.filter(l => { const u = USERS.find(x => x.id === l.userId); return u && u.name.toLowerCase().includes(q); });
+
+  const tbody = document.getElementById('logs-body');
+  const empty = document.getElementById('logs-empty');
+  tbody.innerHTML = '';
+  if (!logs.length) { empty.style.display = 'block'; return; }
+  empty.style.display = 'none';
+
+  logs.forEach(log => {
+    const u = USERS.find(x => x.id === log.userId); if (!u) return;
+    const s = new Date(log.start), e = new Date(log.end);
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><span class="user-chip"><span class="user-dot" style="background:${u.hex}"></span>${u.name}</span></td>
+      <td>${s.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</td>
+      <td class="mono">${s.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})}</td>
+      <td class="mono">${e.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})}</td>
+      <td class="mono">${fmtMs(log.duration)}</td>
+      <td style="color:#10b981;font-weight:600">${fmtMoney(log.duration)}</td>
+      <td><span class="cycle-tag">${cycleLabel(cycleKey(log.start))}</span></td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+// ── DOGGO SVGs ────────────────────────────────────────────────────────────────
+const DOG_SIT = `<svg width="60" height="48" viewBox="0 0 60 48" xmlns="http://www.w3.org/2000/svg">
+  <!-- Curled body (circle/donut shape) -->
+  <ellipse cx="32" cy="34" rx="22" ry="13" fill="#f2f2f2"/>
+  <!-- Black saddle on back of curled body -->
+  <ellipse cx="34" cy="27" rx="20" ry="9" fill="#222"/>
+  <!-- White tummy showing -->
+  <ellipse cx="30" cy="38" rx="14" ry="8" fill="#f2f2f2"/>
+  <!-- Tail curled around body -->
+  <path d="M52 28 C62 22 64 36 52 38 C46 39 40 42 38 42" stroke="#e0e0e0" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <!-- Paws tucked in front -->
+  <ellipse cx="16" cy="42" rx="7" ry="4" fill="#f2f2f2"/>
+  <ellipse cx="28" cy="44" rx="7" ry="4" fill="#f2f2f2"/>
+  <!-- Head resting down (turned, mostly white) -->
+  <ellipse cx="16" cy="28" rx="14" ry="13" fill="#f2f2f2"/>
+  <!-- Dark cap/back of head -->
+  <ellipse cx="14" cy="21" rx="13" ry="9" fill="#2b2b2b"/>
+  <!-- Floppy ear resting on ground -->
+  <ellipse cx="5" cy="30" rx="5" ry="9" fill="#2b2b2b" transform="rotate(20 5 30)"/>
+  <!-- Other ear -->
+  <ellipse cx="25" cy="19" rx="4" ry="7" fill="#2b2b2b" transform="rotate(-10 25 19)"/>
+  <!-- Closed sleepy eyes (curved lines) -->
+  <path d="M10 27 Q13 24 16 27" stroke="#2b2b2b" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+  <path d="M19 26 Q22 23 25 26" stroke="#2b2b2b" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+  <!-- Nose -->
+  <ellipse cx="11" cy="33" rx="3.5" ry="2.5" fill="#111"/>
+  <!-- Zzz -->
+  <text x="36" y="16" font-size="9" fill="#9095a3" font-family="Inter,sans-serif" font-weight="600" opacity="0.8">z</text>
+  <text x="41" y="10" font-size="7" fill="#9095a3" font-family="Inter,sans-serif" font-weight="600" opacity="0.6">z</text>
+  <text x="45" y="5" font-size="5" fill="#9095a3" font-family="Inter,sans-serif" font-weight="600" opacity="0.4">z</text>
+</svg>`;
+
+const DOG_RUN = `<svg width="60" height="50" viewBox="0 0 60 50" xmlns="http://www.w3.org/2000/svg">
+  <!-- Tail up -->
+  <path d="M52 16 C60 8 62 2 53 0" stroke="#e8e8e8" stroke-width="3.2" fill="none" stroke-linecap="round"/>
+  <!-- Body -->
+  <ellipse cx="36" cy="22" rx="20" ry="13" fill="#f2f2f2"/>
+  <!-- Black saddle -->
+  <ellipse cx="38" cy="15" rx="18" ry="9" fill="#222"/>
+  <!-- White belly/chest -->
+  <ellipse cx="24" cy="24" rx="10" ry="10" fill="#f2f2f2"/>
+  <!-- Neck -->
+  <ellipse cx="17" cy="19" rx="9" ry="8" fill="#f2f2f2"/>
+  <!-- Head (forward lean, mostly white) -->
+  <ellipse cx="10" cy="18" rx="12" ry="12" fill="#f2f2f2"/>
+  <!-- Dark gray cap on head -->
+  <ellipse cx="10" cy="11" rx="11" ry="8" fill="#2b2b2b"/>
+  <!-- Ears swept back in wind -->
+  <ellipse cx="3" cy="9" rx="4" ry="7.5" fill="#2b2b2b" transform="rotate(-32 3 9)"/>
+  <ellipse cx="16" cy="5" rx="3.5" ry="6.5" fill="#2b2b2b" transform="rotate(-22 16 5)"/>
+  <!-- White face area -->
+  <ellipse cx="7" cy="20" rx="8" ry="8" fill="#f2f2f2"/>
+  <!-- Brow patch -->
+  <ellipse cx="8" cy="14" rx="4" ry="2.5" fill="#2b2b2b" opacity="0.4"/>
+  <!-- Eye -->
+  <circle cx="8" cy="17" r="3.5" fill="#9B6535"/>
+  <circle cx="8" cy="17" r="2.1" fill="#1a0f00"/>
+  <circle cx="9" cy="16" r="0.9" fill="white"/>
+  <!-- Nose -->
+  <ellipse cx="1" cy="22" rx="3" ry="2.2" fill="#111"/>
+  <!-- Tongue flopping out while running -->
+  <ellipse cx="5" cy="27" rx="3.5" ry="4.5" fill="#f07878" transform="rotate(20 5 27)"/>
+  <path d="M4.5 24 L5.5 30" stroke="#d05858" stroke-width="0.9" fill="none" transform="rotate(20 5 27)"/>
+  <!-- Front legs reaching forward -->
+  <path d="M22 30 L13 42 L8 44" stroke="#f2f2f2" stroke-width="3.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M28 32 L23 45 L17 48" stroke="#f2f2f2" stroke-width="3.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Back legs pushing off -->
+  <path d="M46 28 L53 40 L57 41" stroke="#f2f2f2" stroke-width="3.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M42 30 L50 41 L55 40" stroke="#f2f2f2" stroke-width="3.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>`;
+
+// ── DOGGO ─────────────────────────────────────────────────────────────────────
+let _dogFacing = 1;
+
+function updateDoggo() {
+  const anyActive = USERS.some(u => data.active[u.id]);
+  const wrap   = document.getElementById('doggo-wrap');
+  const status = document.getElementById('doggo-status');
+  const emoji  = document.getElementById('dog-emoji');
+  if (!wrap) return;
+
+  if (anyActive) {
+    if (!wrap.classList.contains('run')) {
+      wrap.className = 'doggo-wrap run';
+      _dogFacing = 1;
+      emoji.style.transform = 'scaleX(1)';
+      emoji.innerHTML = DOG_RUN;
+      wrap.addEventListener('animationiteration', (e) => {
+        if (e.animationName === 'dogSlide') {
+          _dogFacing *= -1;
+          emoji.style.transform = `scaleX(${_dogFacing})`;
+        }
+      });
+    }
+    status.textContent = 'on the job! 🎾';
+  } else {
+    wrap.className = 'doggo-wrap rest';
+    emoji.style.transform = 'scaleX(1)';
+    emoji.innerHTML = DOG_SIT;
+    status.textContent = 'resting 💤';
+  }
+}
+
+// ── TOPBAR ────────────────────────────────────────────────────────────────────
+function renderTopbar() {
+  const active = USERS.filter(u => data.active[u.id]);
+  const dot = document.getElementById('active-dot');
+  const lbl = document.getElementById('active-label');
+  if (active.length) {
+    dot.className = 'dot';
+    lbl.textContent = active.length === 1
+      ? `${active[0].name} is recording`
+      : `${active.map(u => u.name).join(', ')} recording`;
+  } else {
+    dot.className = 'dot off';
+    lbl.textContent = 'No active timers';
+  }
+  updateDoggo();
+}
+
+// ── PAGE SWITCH ───────────────────────────────────────────────────────────────
+function switchPage(name, btn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  btn.classList.add('active');
+  document.getElementById('topbar-title').textContent = btn.textContent.trim();
+  if (name === 'logs') renderLogs();
+}
+
+// ── MAIN RENDER ───────────────────────────────────────────────────────────────
+function renderAll() {
+  document.getElementById('sidebar-cycle').textContent = cycleLabel(todayCycle());
+  renderTopbar();
+  renderUsers();
+  renderSummary();
+  renderCharts();
+  if (document.getElementById('page-logs').classList.contains('active')) renderLogs();
+}
+
+// ── TICK (live clock + earnings) ───────────────────────────────────────────────
+function tick() {
+  if (!Object.keys(data.active).length) return;
+  USERS.forEach(u => {
+    if (!data.active[u.id]) return;
+    const ms = liveMs(u.id);
+    const totalMs = userCycleMs(u.id, todayCycle()) + ms;
+    const timerEl = document.getElementById('timer-' + u.id);
+    const hrsEl   = document.getElementById('hrs-'   + u.id);
+    const earnEl  = document.getElementById('earn-'  + u.id);
+    if (timerEl) timerEl.textContent = fmtMs(ms);
+    if (hrsEl)   hrsEl.textContent   = fmtHrs(totalMs);
+    if (earnEl)  earnEl.textContent  = fmtMoney(totalMs);
+  });
+}
+
+// ── FIRESTORE LISTENERS ───────────────────────────────────────────────────────
+function checkReady() {
+  if (ready.sessions && ready.active) {
+    document.getElementById('loading').classList.add('hidden');
+    // Initialize dog to sitting on first load
+    document.getElementById('dog-emoji').innerHTML = DOG_SIT;
+    renderAll();
+  }
+}
+
+db.collection('sessions').onSnapshot(snap => {
+  data.logs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  ready.sessions = true;
+  checkReady();
+  if (ready.active) renderAll();
+});
+
+db.collection('active').onSnapshot(snap => {
+  data.active = {};
+  snap.docs.forEach(d => { data.active[d.id] = d.data().startTs; });
+  ready.active = true;
+  checkReady();
+  if (ready.sessions) renderAll();
+});
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+const uSel = document.getElementById('logs-user-filter');
+USERS.forEach(u => {
+  const o = document.createElement('option');
+  o.value = u.id; o.textContent = u.name;
+  uSel.appendChild(o);
+});
+
+['logs-user-filter','logs-cycle-filter','logs-search'].forEach(id => {
+  document.getElementById(id).addEventListener('input', renderLogs);
+});
+
+setInterval(tick, 1000);
+setInterval(() => {
+  renderSummary(); renderCharts(); renderTopbar();
+  // Detect cycle rollover (new week started while page was open)
+  const current = todayCycle();
+  if (current !== _lastCycle) {
+    _lastCycle = current;
+    renderAll(); // full re-render with new cycle
+  }
+}, 30000);
+</script>
+</body>
+</html>
